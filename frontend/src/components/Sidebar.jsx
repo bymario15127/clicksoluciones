@@ -87,6 +87,9 @@ const Sidebar = ({ isOpen, onClose }) => {
             <NavLink to="/administracion" className="sidebar-link" onClick={handleLinkClick}>
               Administración
             </NavLink>
+            <NavLink to="/configuracion" className="sidebar-link" onClick={handleLinkClick}>
+              Configuración
+            </NavLink>
           </>
         )}
 

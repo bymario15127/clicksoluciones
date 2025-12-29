@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { quotesService } from '../services/quotes'
+import { exportService } from '../services/export'
 
 const QuoteDetail = () => {
   const { id } = useParams()
@@ -149,6 +150,13 @@ const QuoteDetail = () => {
       <div className="card">
         <h3>Acciones</h3>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <button 
+            onClick={() => exportService.downloadQuote(id)} 
+            className="btn btn-primary"
+            title="Descargar cotización en Excel"
+          >
+            📥 Descargar Excel
+          </button>
           {quote.status === 'borrador' && (
             <button onClick={() => handleStatusChange('enviada')} className="btn btn-info">
               Marcar como Enviada

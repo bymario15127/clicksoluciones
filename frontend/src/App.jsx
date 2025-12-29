@@ -17,6 +17,7 @@ import QuoteNew from './pages/QuoteNew'
 import QuoteDetail from './pages/QuoteDetail'
 import Sales from './pages/Sales'
 import Admin from './pages/Admin'
+import AdminSettings from './pages/AdminSettings'
 import Companies from './pages/Companies'
 import CompanyDetail from './pages/CompanyDetail'
 
@@ -54,6 +55,7 @@ function App() {
             <Route path="cotizaciones/:id" element={<QuoteDetail />} />
             <Route path="ventas" element={<Sales />} />
             <Route path="administracion" element={<ProtectedRoute roles={['admin']}><Admin /></ProtectedRoute>} />
+            <Route path="configuracion" element={<ProtectedRoute roles={['admin']}><AdminSettings /></ProtectedRoute>} />
 
             {/* Redirecciones de rutas antiguas en inglés para compatibilidad */}
             <Route path="clients" element={<Navigate to="/clientes" replace />} />

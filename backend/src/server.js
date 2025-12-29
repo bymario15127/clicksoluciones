@@ -9,6 +9,7 @@ import productsRoutes from './routes/products.js'
 import quotesRoutes from './routes/quotes.js'
 import salesRoutes from './routes/sales.js'
 import companiesRoutes from './routes/companies.js'
+import exportRoutes from './routes/export.js'
 
 dotenv.config()
 
@@ -22,6 +23,7 @@ app.use(express.urlencoded({ extended: true }))
 
 // Routes
 app.use('/api/auth', authRoutes)
+app.use('/api/export', exportRoutes)
 app.use('/api/users', usersRoutes)
 app.use('/api/tickets', ticketsRoutes)
 app.use('/api/clients', clientsRoutes)

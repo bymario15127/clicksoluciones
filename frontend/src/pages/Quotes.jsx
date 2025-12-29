@@ -40,9 +40,11 @@ const Quotes = () => {
     <div className="quotes-page">
       <div className="page-header">
         <h1>Cotizaciones</h1>
-        <Link to="/cotizaciones/new" className="btn btn-primary">
-          Crear Cotización
-        </Link>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <Link to="/cotizaciones/new" className="btn btn-primary">
+            ➕ Crear Cotización
+          </Link>
+        </div>
       </div>
 
       <div className="card">
