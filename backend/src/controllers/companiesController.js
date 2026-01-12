@@ -4,6 +4,16 @@ const companiesController = {
   // Obtener todas las empresas
   async getAll(req, res) {
     try {
+      // Si el usuario tiene rol de cliente, solo puede ver su propia empresa
+      if (req.user.role === 'client' && req.user.company_id) {
+        const [companies] = await db.query(
+          'SELECT * FROM companies WHERE id = ? AND active = true',
+          [req.user.company_id]
+        )
+        return res.json(companies)
+      }
+      
+      // Administradores y otros roles pueden ver todas las empresas
       const [companies] = await db.query(
         'SELECT * FROM companies WHERE active = true ORDER BY name'
       )

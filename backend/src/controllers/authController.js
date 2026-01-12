@@ -7,11 +7,14 @@ export const login = async (req, res) => {
     const { email, username, identifier, password } = req.body
     const idf = (username || identifier || email || '').trim()
     console.log('🔵 Login attempt:', { identifier: idf ? idf : '(empty)' })
+    console.log('🔵 Password received:', password)
 
     // Buscar por email o por usuario generado a partir del nombre: apellido.nombre (case-insensitive)
     let users = []
+    console.log('🔵 About to query database...')
     if (idf.includes('.')) {
       const [lastIdf, firstIdf] = idf.split('.')
+      console.log('🔵 Querying with dot notation:', { lastIdf, firstIdf })
       users = await query(
         `SELECT u.*, r.name as role_name 
          FROM users u 
@@ -30,6 +33,7 @@ export const login = async (req, res) => {
         [idf, lastIdf, firstIdf, idf]
       )
     } else {
+      console.log('🔵 Querying without dot notation')
       users = await query(
         `SELECT u.*, r.name as role_name 
          FROM users u 
@@ -44,6 +48,7 @@ export const login = async (req, res) => {
         [idf, idf]
       )
     }
+    console.log('🔵 Query completed')
     console.log('🔵 Users found:', users.length, users)
 
     if (users.length === 0) {
@@ -85,6 +90,8 @@ export const login = async (req, res) => {
       }
     })
   } catch (error) {
+    console.error('❌ Login error:', error)
+    console.error('❌ Error stack:', error.stack)
     res.status(500).json({ message: 'Error en el servidor', error: error.message })
   }
 }
