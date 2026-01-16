@@ -48,6 +48,19 @@ export const create = async (req, res) => {
   try {
     const { name, email, password, role_id, company_id } = req.body
 
+    // Validaciones
+    if (!name || name.trim() === '') {
+      return res.status(400).json({ message: 'El nombre es obligatorio' })
+    }
+    
+    if (!password || password.trim() === '') {
+      return res.status(400).json({ message: 'La contraseña es obligatoria' })
+    }
+    
+    if (!role_id) {
+      return res.status(400).json({ message: 'El rol es obligatorio' })
+    }
+
     const normalizedEmail = email && email.trim() !== '' ? email.trim() : null
 
     if (normalizedEmail) {
@@ -69,6 +82,7 @@ export const create = async (req, res) => {
       id: result.insertId 
     })
   } catch (error) {
+    console.error('Error creating user:', error)
     res.status(500).json({ message: 'Error en el servidor', error: error.message })
   }
 }

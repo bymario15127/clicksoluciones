@@ -118,6 +118,7 @@ const Tickets = () => {
       </div>
 
       <div className="card">
+        <div className="table-responsive">
         <table>
           <thead>
             <tr>
@@ -166,6 +167,7 @@ const Tickets = () => {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )

@@ -3,6 +3,7 @@ import { query } from '../config/database.js'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
+import puppeteer from 'puppeteer'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -95,6 +96,14 @@ export const generateQuoteExcel = async (req, res) => {
         workbook.definedNames.model.names = []
       }
       worksheet = workbook.getWorksheet(1) || workbook.worksheets[0]
+      
+      // VERIFICAR imágenes
+      const images = worksheet.getImages()
+      console.log(`🖼️ Imágenes en template: ${images.length}`)
+      images.forEach((img, idx) => {
+        console.log(`   Imagen ${idx + 1}: Filas ${img.range.tl.row}-${img.range.br.row}, Columnas ${img.range.tl.col}-${img.range.br.col}`)
+      })
+      
       useTemplate = true
     } else {
       console.log('📄 Creando formato por defecto (no hay template)')
@@ -112,12 +121,18 @@ export const generateQuoteExcel = async (req, res) => {
         '{{fecha}}': new Date(quote.created_at).toLocaleDateString('es-CO'),
         '{{numero}}': `RV${String(quote.id).padStart(3, '0')}`,
         '{{numero_cotizacion}}': `RV${String(quote.id).padStart(3, '0')}`,
+        '{{no}}': `RV${String(quote.id).padStart(3, '0')}`,
+        '{{No}}': `RV${String(quote.id).padStart(3, '0')}`,
         '{{subtotal}}': subtotal,
         '{{iva}}': iva,
-        '{{total}}': total
+        '{{total}}': total,
+        '{{SUBTOTAL}}': subtotal,
+        '{{IVA}}': iva,
+        '{{TOTAL}}': total
       }
 
       let itemsRowStart = null
+      let itemsColumnStart = null
       let itemTemplateStyles = {}
       let headerRowDetected = null
 
@@ -136,36 +151,49 @@ export const generateQuoteExcel = async (req, res) => {
         return ''
       }
 
+      // Primer pase: detectar {{items}} ANTES de reemplazar otros placeholders
       worksheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
         row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-          const cellTextOriginal = getCellText(cell)
-          if (!cellTextOriginal) return
+          const cellText = getCellText(cell)
+          if (!cellText || !cellText.includes('{{items}}')) return
+          
+          itemsRowStart = rowNumber
+          itemsColumnStart = colNumber
+          // Guardar estilos base de TODA la fila para reutilizar luego
+          row.eachCell({ includeEmpty: true }, (c, cIdx) => {
+            // Copiar profundamente todos los estilos
+            itemTemplateStyles[cIdx] = JSON.parse(JSON.stringify(c.style || {}))
+          })
+          console.log(`📍 Placeholder {{items}} encontrado en fila ${rowNumber}, columna ${String.fromCharCode(64 + colNumber)} (${colNumber})`)
+          console.log(`   Estilos guardados para ${Object.keys(itemTemplateStyles).length} celdas`)
+        })
+      })
 
-          let cellText = cellTextOriginal
+      // Segundo pase: detectar encabezados si no hay {{items}}
+      if (!itemsRowStart) {
+        worksheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+          row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            const cellText = getCellText(cell).toUpperCase().replace(/\s+/g, '')
+            if (!headerRowDetected && (cellText.includes('ITEM') || cellText.includes('ÍTEM'))) {
+              headerRowDetected = rowNumber
+              console.log(`📍 Encabezado de items detectado en fila ${rowNumber}`)
+            }
+          })
+        })
+      }
 
-          if (cellText.includes('{{items}}')) {
-            itemsRowStart = rowNumber
-            // Guardar estilos base de la fila del placeholder para reutilizar
-            row.eachCell({ includeEmpty: true }, (c, cIdx) => {
-              itemTemplateStyles[cIdx] = { ...c.style }
-            })
-            console.log(`📍 Placeholder {{items}} encontrado en fila ${rowNumber}`)
-          }
-
-          // Si no hay placeholder, detectar encabezado por texto "ITEM" o "ÍTEM"
-          const upper = cellText.toUpperCase().replace(/\s+/g, '')
-          if (!headerRowDetected && (upper.includes('ITEM') || upper.includes('ÍTEM'))) {
-            headerRowDetected = rowNumber
-            console.log(`📍 Encabezado de items detectado en fila ${rowNumber}`)
-          }
+      // Tercer pase: reemplazar todos los placeholders (excepto {{items}})
+      worksheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+        row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+          let cellText = getCellText(cell)
+          if (!cellText) return
 
           Object.keys(replacements).forEach(placeholder => {
             if (cellText.includes(placeholder)) {
               const replacement = replacements[placeholder]
               if (typeof replacement === 'number') {
                 cell.value = replacement
-                cell.numFmt = '$#,##0.00'
-                cellText = String(replacement)
+                cell.numFmt = '$#.##0'
               } else {
                 cellText = cellText.replace(placeholder, replacement)
                 cell.value = cellText
@@ -173,6 +201,36 @@ export const generateQuoteExcel = async (req, res) => {
               console.log(`✓ Reemplazado ${placeholder} en ${cell.address}`)
             }
           })
+        })
+      })
+
+      // Cuarto pase: Limpiar cualquier placeholder, fórmula o error que cause #¡VALOR!
+      worksheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+        row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+          // Si la celda tiene error, limpiarla
+          if (cell.value && typeof cell.value === 'object' && cell.value.error) {
+            cell.value = ''
+            console.log(`⚠️ Error ${cell.value.error} eliminado en ${cell.address}`)
+            return
+          }
+          
+          let cellText = getCellText(cell)
+          if (!cellText) return
+          
+          // Si hay {{...}} sin reemplazar, eliminarlos
+          const placeholderRegex = /\{\{[^}]+\}\}/g
+          if (placeholderRegex.test(cellText)) {
+            const cleaned = cellText.replace(placeholderRegex, '')
+            cell.value = cleaned || '' // Dejar vacío si solo había placeholder
+            console.log(`⚠️ Placeholder sin mapear eliminado en ${cell.address}: ${cellText}`)
+          }
+          
+          // Si la celda tiene una fórmula que referencia placeholders, eliminarla
+          if (cell.formula && cell.formula.includes('{{')) {
+            cell.value = ''
+            delete cell.formula
+            console.log(`⚠️ Fórmula con placeholder eliminada en ${cell.address}`)
+          }
         })
       })
 
@@ -189,62 +247,110 @@ export const generateQuoteExcel = async (req, res) => {
         console.log(`📦 Insertando ${items.length} items desde fila ${itemsRowStart}`)
 
         const baseRow = worksheet.getRow(itemsRowStart)
-        const baseHeight = baseRow.height
+        const baseHeight = baseRow.height || 25
 
-        const setItemValues = (rowObj, item, index) => {
-          // Copiar estilo base si existe
-          Object.keys(itemTemplateStyles).forEach(col => {
-            rowObj.getCell(Number(col)).style = itemTemplateStyles[col]
-          })
-
-          if (baseHeight) {
-            rowObj.height = baseHeight
-          }
-
-          const descripcion = item.product_name || item.description || 'Producto'
-          const cantidad = parseFloat(item.quantity) || 0
-          const precioUnitario = parseFloat(item.unit_price ?? item.price) || 0
-          const precioTotal = parseFloat(item.total_price ?? item.total) || (cantidad * precioUnitario)
-
-          // Mapea a columnas del template: B=ITEM, C=CARACTERÍSTICA, G=CANTIDAD, H=VALOR UNITARIO, I=VALOR TOTAL
-          rowObj.getCell(2).value = index + 1
-          rowObj.getCell(3).value = descripcion
-          rowObj.getCell(7).value = cantidad
-          rowObj.getCell(7).alignment = { horizontal: 'center' }
-          rowObj.getCell(8).value = precioUnitario
-          rowObj.getCell(8).numFmt = '$#,##0.00'
-          rowObj.getCell(9).value = precioTotal
-          rowObj.getCell(9).numFmt = '$#,##0.00'
-
-          // Limpia posibles restos del placeholder en la fila base
-          rowObj.eachCell({ includeEmpty: true }, (c) => {
-            if (typeof c.value === 'string' && c.value.includes('{{items}}')) {
-              c.value = ''
-            }
-          })
-
-          console.log(`  ✓ Item ${index + 1}: ${descripcion} - Cant:${cantidad} Unit:$${precioUnitario} Total:$${precioTotal}`)
+        // USAR columna detectada en el primer pase
+        let itemsColumnNumber = itemsColumnStart || 2
+        console.log(`🔍 Usando columna detectada: ${String.fromCharCode(64 + itemsColumnNumber)} (número ${itemsColumnNumber})`)
+        
+        // CALCULAR: Posiciones de columnas basadas en {{items}}
+        // Si {{items}} está en col C (3), el layout es: C=ITEM, D=CARACTERÍSTICA, E=MARCA, F=REFERENCIA, G=UNIDAD, H=CANTIDAD, I=UNITARIO, J=TOTAL
+        const itemCol = itemsColumnNumber         // C = ITEM (número de ítem)
+        const descCol = itemsColumnNumber + 1     // D = CARACTERÍSTICA (nombre producto)
+        const marcaCol = itemsColumnNumber + 2    // E = MARCA
+        const refCol = itemsColumnNumber + 3      // F = REFERENCIA
+        const unidadCol = itemsColumnNumber + 4   // G = UNIDAD
+        const cantCol = itemsColumnNumber + 5     // H = CANTIDAD
+        const unitCol = itemsColumnNumber + 6     // I = VALOR UNITARIO
+        const totalCol = itemsColumnNumber + 7    // J = VALOR TOTAL
+        
+        console.log(`📊 Mapeando columnas: ITEM=${String.fromCharCode(64+itemCol)}, DESC=${String.fromCharCode(64+descCol)}, MARCA=${String.fromCharCode(64+marcaCol)}, REF=${String.fromCharCode(64+refCol)}, UNIDAD=${String.fromCharCode(64+unidadCol)}, CANT=${String.fromCharCode(64+cantCol)}, UNIT=${String.fromCharCode(64+unitCol)}, TOTAL=${String.fromCharCode(64+totalCol)}`)
+        
+        // FUNCIÓN: Clonar celda con TODOS sus estilos
+        const cloneCellStyle = (sourceCell, targetCell) => {
+          if (sourceCell.numFmt) targetCell.numFmt = sourceCell.numFmt
+          if (sourceCell.font) targetCell.font = { ...sourceCell.font }
+          if (sourceCell.fill) targetCell.fill = { ...sourceCell.fill }
+          if (sourceCell.border) targetCell.border = { ...sourceCell.border }
+          if (sourceCell.alignment) targetCell.alignment = { ...sourceCell.alignment }
+          if (sourceCell.protection) targetCell.protection = { ...sourceCell.protection }
         }
 
-        if (items.length > 0) {
-          // Usa la fila del placeholder para el primer item
-          setItemValues(baseRow, items[0], 0)
-
-          // Inserta filas adicionales para los demás
-          for (let i = 1; i < items.length; i++) {
-            const newRow = worksheet.insertRow(itemsRowStart + i, [])
-            setItemValues(newRow, items[i], i)
+        // GUARDAR estilos originales de la fila base para clonar perfectamente
+        const baseRowStyles = {}
+        for (let col = 1; col <= 20; col++) {
+          const cell = baseRow.getCell(col)
+          baseRowStyles[col] = {
+            numFmt: cell.numFmt,
+            font: cell.font ? { ...cell.font } : null,
+            fill: cell.fill ? { ...cell.fill } : null,
+            border: cell.border ? { ...cell.border } : null,
+            alignment: cell.alignment ? { ...cell.alignment } : null,
+            protection: cell.protection ? { ...cell.protection } : null
           }
-        } else {
-          // Si no hay items, limpiar la fila placeholder
-          baseRow.eachCell({ includeEmpty: true }, c => {
-            if (typeof c.value === 'string' && c.value.includes('{{items}}')) {
-              c.value = ''
-            }
-          })
         }
+        
+        // LLENAR primer item (conservando estilos)
+        const item0 = items[0]
+        const desc0 = item0.product_name || item0.description || 'Producto'
+        const cant0 = parseFloat(item0.quantity) || 0
+        const unit0 = parseFloat(item0.unit_price ?? item0.price) || 0
+        const total0 = cant0 * unit0
+
+        baseRow.getCell(itemCol).value = 1
+        baseRow.getCell(descCol).value = desc0
+        baseRow.getCell(marcaCol).value = ''
+        baseRow.getCell(refCol).value = ''
+        baseRow.getCell(unidadCol).value = ''
+        baseRow.getCell(cantCol).value = cant0
+        baseRow.getCell(unitCol).value = unit0
+        baseRow.getCell(totalCol).value = total0
+
+        console.log(`  ✓ Item 1: ${desc0}`)
+
+        // ITEMS ADICIONALES: NO usar spliceRows (destruye imágenes)
+        // En su lugar, trabajar directamente con las filas
+        for (let i = 1; i < items.length; i++) {
+          const item = items[i]
+          const desc = item.product_name || item.description || 'Producto'
+          const cant = parseFloat(item.quantity) || 0
+          const unit = parseFloat(item.unit_price ?? item.price) || 0
+          const total = cant * unit
+
+          const newRowNum = itemsRowStart + i
+          const newRow = worksheet.getRow(newRowNum)
+          newRow.height = baseHeight
+          
+          // COPIAR estilos de la fila base (sin spliceRows)
+          for (let col = 1; col <= 20; col++) {
+            const sourceCell = baseRow.getCell(col)
+            const targetCell = newRow.getCell(col)
+            
+            // Copiar estilos
+            if (sourceCell.numFmt) targetCell.numFmt = sourceCell.numFmt
+            if (sourceCell.font) targetCell.font = JSON.parse(JSON.stringify(sourceCell.font))
+            if (sourceCell.fill) targetCell.fill = JSON.parse(JSON.stringify(sourceCell.fill))
+            if (sourceCell.border) targetCell.border = JSON.parse(JSON.stringify(sourceCell.border))
+            if (sourceCell.alignment) targetCell.alignment = JSON.parse(JSON.stringify(sourceCell.alignment))
+            if (sourceCell.protection) targetCell.protection = JSON.parse(JSON.stringify(sourceCell.protection))
+          }
+
+          // LLENAR con datos del producto
+          newRow.getCell(itemCol).value = i + 1
+          newRow.getCell(descCol).value = desc
+          newRow.getCell(marcaCol).value = ''
+          newRow.getCell(refCol).value = ''
+          newRow.getCell(unidadCol).value = ''
+          newRow.getCell(cantCol).value = cant
+          newRow.getCell(unitCol).value = unit
+          newRow.getCell(totalCol).value = total
+
+          console.log(`  ✓ Item ${i + 1}: ${desc}`)
+        }
+
+        console.log(`✅ Se llenaron ${items.length} productos correctamente`)
       } else {
-        console.warn('⚠️ No se encontró fila de items ni encabezado. Revisa que el template tenga {{items}} o la fila de encabezados con "ITEM".')
+        console.warn('⚠️ CRÍTICO: No se encontró {{items}} en el template')
       }
     } else {
       // ===== CREAR FORMATO POR DEFECTO =====
@@ -329,12 +435,12 @@ export const generateQuoteExcel = async (req, res) => {
         
         const precioUnitario = parseFloat(item.unit_price) || 0
         worksheet.getCell(`F${row}`).value = precioUnitario
-        worksheet.getCell(`F${row}`).numFmt = '$#,##0.00'
+        worksheet.getCell(`F${row}`).numFmt = '$#.##0'
         worksheet.getCell(`F${row}`).alignment = { horizontal: 'right' }
         
         const precioTotal = parseFloat(item.total_price) || (cantidad * precioUnitario)
         worksheet.getCell(`G${row}`).value = precioTotal
-        worksheet.getCell(`G${row}`).numFmt = '$#,##0.00'
+        worksheet.getCell(`G${row}`).numFmt = '$#.##0'
         worksheet.getCell(`G${row}`).alignment = { horizontal: 'right' }
         
         console.log(`Item ${index + 1}: ${descripcion} - $${precioTotal}`)
@@ -354,7 +460,7 @@ export const generateQuoteExcel = async (req, res) => {
       worksheet.getCell(`E${row}`).font = { bold: true }
       worksheet.getCell(`E${row}`).alignment = { horizontal: 'right' }
       worksheet.getCell(`G${row}`).value = subtotal
-      worksheet.getCell(`G${row}`).numFmt = '$#,##0.00'
+      worksheet.getCell(`G${row}`).numFmt = '$#.##0'
       worksheet.getCell(`G${row}`).font = { bold: true }
       worksheet.getCell(`G${row}`).alignment = { horizontal: 'right' }
       worksheet.getCell(`G${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F4F8' } }
@@ -364,7 +470,7 @@ export const generateQuoteExcel = async (req, res) => {
       worksheet.getCell(`E${row}`).font = { bold: true }
       worksheet.getCell(`E${row}`).alignment = { horizontal: 'right' }
       worksheet.getCell(`G${row}`).value = iva
-      worksheet.getCell(`G${row}`).numFmt = '$#,##0.00'
+      worksheet.getCell(`G${row}`).numFmt = '$#.##0'
       worksheet.getCell(`G${row}`).font = { bold: true }
       worksheet.getCell(`G${row}`).alignment = { horizontal: 'right' }
       worksheet.getCell(`G${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F4F8' } }
@@ -374,7 +480,7 @@ export const generateQuoteExcel = async (req, res) => {
       worksheet.getCell(`E${row}`).font = { bold: true, size: 12 }
       worksheet.getCell(`E${row}`).alignment = { horizontal: 'right' }
       worksheet.getCell(`G${row}`).value = total
-      worksheet.getCell(`G${row}`).numFmt = '$#,##0.00'
+      worksheet.getCell(`G${row}`).numFmt = '$#.##0'
       worksheet.getCell(`G${row}`).font = { bold: true, size: 12, color: { argb: 'FF0066CC' } }
       worksheet.getCell(`G${row}`).alignment = { horizontal: 'right' }
       worksheet.getCell(`G${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9EEF7' } }
@@ -383,6 +489,12 @@ export const generateQuoteExcel = async (req, res) => {
     // Guardar y descargar
     const filename = `Cotizacion_RV${String(quote.id).padStart(3, '0')}_${Date.now()}.xlsx`
     const filepath = path.join(__dirname, `../../uploads/${filename}`)
+    
+    // VERIFICAR imágenes antes de guardar
+    if (useTemplate) {
+      const finalImages = worksheet.getImages()
+      console.log(`🖼️ Imágenes antes de guardar: ${finalImages.length}`)
+    }
     
     console.log(`💾 Guardando archivo: ${filename}`)
     await workbook.xlsx.writeFile(filepath)
@@ -401,7 +513,6 @@ export const generateQuoteExcel = async (req, res) => {
   }
 }
 
-// Template en blanco para descargar
 export const downloadQuoteTemplate = async (req, res) => {
   try {
     const workbook = new ExcelJS.Workbook()

@@ -12,3 +12,38 @@ uploads/
 *.swo
 *~
 .idea/
+ 
+# Additional nested dependency/build folders
+**/node_modules/
+**/dist/
+**/build/
+
+# Tooling caches and coverage
+coverage/
+**/coverage/
+.vite/
+**/.vite/
+.esbuild/
+**/.esbuild/
+
+# Environment files (any depth)
+.env.*
+**/.env.*
+
+# Logs folders (any depth)
+logs/
+**/logs/
+
+# OS-specific
+Thumbs.db
+
+# Runtime uploads and temp in subfolders
+backend/uploads/
+temp/
+backend/temp/
+**/*.tmp
+
+# Generated exports (Excel/PDF)
+exports/
+**/*.xlsx
+**/*.pdf

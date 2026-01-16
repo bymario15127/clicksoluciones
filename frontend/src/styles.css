@@ -264,6 +264,17 @@ table tbody tr:nth-child(even):hover {
   background-color: #f0f4f8;
 }
 
+/* Tabla responsive helper */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-responsive table {
+  min-width: 720px; /* asegura columnas visibles, scroll en pantallas pequeñas */
+}
+
 /* BADGES MEJORADOS */
 .badge {
   display: inline-block;

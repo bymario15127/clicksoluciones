@@ -44,6 +44,7 @@ const Sales = () => {
       </div>
 
       <div className="card">
+        <div className="table-responsive">
         <table>
           <thead>
             <tr>
@@ -75,6 +76,7 @@ const Sales = () => {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )

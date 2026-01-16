@@ -153,10 +153,40 @@ export const update = async (req, res) => {
 
 export const remove = async (req, res) => {
   try {
-    await query('DELETE FROM quotes WHERE id = ?', [req.params.id])
-    res.json({ message: 'Cotización eliminada exitosamente' })
+    const { id } = req.params
+    
+    console.log(`🗑️ Intentando eliminar cotización #${id}`)
+
+    // Paso 1: Verificar que existe
+    const quotes = await query('SELECT id FROM quotes WHERE id = ?', [id])
+    if (!quotes || quotes.length === 0) {
+      console.log(`❌ Cotización #${id} no encontrada`)
+      return res.status(404).json({ message: 'Cotización no encontrada' })
+    }
+    console.log(`✓ Cotización encontrada`)
+
+    // Paso 2: Eliminar items
+    console.log(`→ Eliminando items...`)
+    const itemsDeleted = await query('DELETE FROM quote_items WHERE quote_id = ?', [id])
+    console.log(`✓ Items eliminados`)
+
+    // Paso 3: Eliminar cotización
+    console.log(`→ Eliminando cotización...`)
+    const quoteDeleted = await query('DELETE FROM quotes WHERE id = ?', [id])
+    console.log(`✓ Cotización eliminada`)
+
+    res.json({ 
+      message: 'Cotización eliminada exitosamente',
+      id: id
+    })
+    
   } catch (error) {
-    res.status(500).json({ message: 'Error en el servidor', error: error.message })
+    console.error('❌ ERROR al eliminar:', error.message)
+    console.error('Stack:', error.stack)
+    res.status(500).json({ 
+      message: 'Error al eliminar cotización', 
+      error: error.message
+    })
   }
 }
 

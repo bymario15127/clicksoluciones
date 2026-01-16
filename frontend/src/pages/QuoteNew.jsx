@@ -247,6 +247,7 @@ const QuoteNew = () => {
               No hay productos agregados
             </p>
           ) : (
+            <div className="table-responsive">
             <table>
               <thead>
                 <tr>
@@ -290,6 +291,7 @@ const QuoteNew = () => {
                 </tr>
               </tbody>
             </table>
+            </div>
           )}
         </div>
 

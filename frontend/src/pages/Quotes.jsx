@@ -5,10 +5,21 @@ import { quotesService } from '../services/quotes'
 const Quotes = () => {
   const [quotes, setQuotes] = useState([])
   const [loading, setLoading] = useState(true)
+  const [message, setMessage] = useState('')
+  const [messageType, setMessageType] = useState('') // 'success' o 'error'
 
   useEffect(() => {
     loadQuotes()
   }, [])
+
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => {
+        setMessage('')
+      }, 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [message])
 
   const loadQuotes = async () => {
     try {
@@ -19,6 +30,19 @@ const Quotes = () => {
       console.error('Error loading quotes:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const deleteQuote = async (id) => {
+    try {
+      await quotesService.delete(id)
+      setMessageType('success')
+      setMessage('✅ Cotización eliminada exitosamente')
+      loadQuotes()
+    } catch (error) {
+      console.error('Error deleting quote:', error)
+      setMessageType('error')
+      setMessage('❌ Error al eliminar la cotización')
     }
   }
 
@@ -38,6 +62,22 @@ const Quotes = () => {
 
   return (
     <div className="quotes-page">
+      {message && (
+        <div style={{
+          padding: '15px 20px',
+          marginBottom: '20px',
+          borderRadius: '8px',
+          backgroundColor: messageType === 'success' ? '#d4edda' : '#f8d7da',
+          borderLeft: `4px solid ${messageType === 'success' ? '#28a745' : '#dc3545'}`,
+          color: messageType === 'success' ? '#155724' : '#721c24',
+          fontSize: '16px',
+          fontWeight: '500',
+          animation: 'slideDown 0.3s ease-in-out'
+        }}>
+          {message}
+        </div>
+      )}
+
       <div className="page-header">
         <h1>Cotizaciones</h1>
         <div style={{ display: 'flex', gap: '10px' }}>
@@ -56,6 +96,7 @@ const Quotes = () => {
             </Link>
           </div>
         ) : (
+          <div className="table-responsive">
           <table>
             <thead>
               <tr>
@@ -89,11 +130,20 @@ const Quotes = () => {
                     <Link to={`/cotizaciones/${quote.id}`} className="btn btn-sm btn-primary">
                       Ver
                     </Link>
+                    <button 
+                      onClick={() => deleteQuote(quote.id)}
+                      className="btn btn-sm btn-danger"
+                      style={{ marginLeft: '5px' }}
+                      title="Eliminar cotización"
+                    >
+                      🗑️
+                    </button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

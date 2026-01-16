@@ -45,6 +45,12 @@ body {
   color: var(--text-dark);
 }
 
+/* Imágenes responsivas */
+img, svg, video {
+  max-width: 100%;
+  height: auto;
+}
+
 /* Scrollbar personalizado */
 ::-webkit-scrollbar {
   width: 8px;

@@ -76,6 +76,7 @@ const Clients = () => {
       </div>
 
       <div className="card">
+        <div className="table-responsive">
         <table>
           <thead>
             <tr>
@@ -112,6 +113,7 @@ const Clients = () => {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {showModal && (

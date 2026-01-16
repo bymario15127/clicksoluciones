@@ -84,6 +84,7 @@ const Admin = () => {
 
       <div className="card">
         <h2>Usuarios del Sistema</h2>
+        <div className="table-responsive">
         <table>
           <thead>
             <tr>
@@ -117,6 +118,7 @@ const Admin = () => {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {showModal && (

@@ -8,10 +8,21 @@ const QuoteDetail = () => {
   const navigate = useNavigate()
   const [quote, setQuote] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [message, setMessage] = useState('')
+  const [messageType, setMessageType] = useState('')
 
   useEffect(() => {
     loadQuote()
   }, [id])
+
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => {
+        setMessage('')
+      }, 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [message])
 
   const loadQuote = async () => {
     try {
@@ -58,14 +69,17 @@ const QuoteDetail = () => {
   }
 
   const handleDelete = async () => {
-    if (!confirm('¿Está seguro de eliminar esta cotización?')) return
-
     try {
       await quotesService.delete(id)
-      navigate('/cotizaciones')
+      setMessageType('success')
+      setMessage('✅ Cotización eliminada exitosamente')
+      setTimeout(() => {
+        navigate('/cotizaciones')
+      }, 1500)
     } catch (error) {
       console.error('Error deleting quote:', error)
-      alert('Error al eliminar la cotización')
+      setMessageType('error')
+      setMessage('❌ Error al eliminar la cotización')
     }
   }
 
@@ -79,6 +93,21 @@ const QuoteDetail = () => {
 
   return (
     <div className="quote-detail-page">
+      {message && (
+        <div style={{
+          padding: '15px 20px',
+          marginBottom: '20px',
+          borderRadius: '8px',
+          backgroundColor: messageType === 'success' ? '#d4edda' : '#f8d7da',
+          borderLeft: `4px solid ${messageType === 'success' ? '#28a745' : '#dc3545'}`,
+          color: messageType === 'success' ? '#155724' : '#721c24',
+          fontSize: '16px',
+          fontWeight: '500'
+        }}>
+          {message}
+        </div>
+      )}
+
       <div className="page-header">
         <div>
           <h1>Cotización #{quote.id}</h1>
@@ -107,6 +136,7 @@ const QuoteDetail = () => {
 
       <div className="card" style={{ marginBottom: '20px' }}>
         <h3>Productos</h3>
+        <div className="table-responsive">
         <table>
           <thead>
             <tr>
@@ -145,6 +175,7 @@ const QuoteDetail = () => {
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
 
       <div className="card">
@@ -173,7 +204,7 @@ const QuoteDetail = () => {
             </>
           )}
           <button onClick={handleDelete} className="btn btn-danger">
-            Eliminar Cotización
+            🗑️ Eliminar Cotización
           </button>
         </div>
       </div>

@@ -155,6 +155,7 @@ const CompanyDetail = () => {
         </div>
 
         {company.users && company.users.length > 0 ? (
+          <div className="table-responsive">
           <table>
             <thead>
               <tr>
@@ -193,6 +194,7 @@ const CompanyDetail = () => {
               ))}
             </tbody>
           </table>
+          </div>
         ) : (
           <p>No hay usuarios registrados en esta empresa.</p>
         )}
