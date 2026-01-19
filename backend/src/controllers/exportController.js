@@ -63,7 +63,12 @@ export const generateQuoteExcel = async (req, res) => {
 
     // Obtener items de la cotización
     const items = await query(
-      `SELECT qi.*, p.name as product_name 
+      `SELECT qi.*, 
+        p.name as product_name,
+        COALESCE(qi.description, p.name) as display_name,
+        qi.marca,
+        qi.referencia,
+        qi.unidad
        FROM quote_items qi
        LEFT JOIN products p ON qi.product_id = p.id
        WHERE qi.quote_id = ?`,
@@ -266,18 +271,30 @@ export const generateQuoteExcel = async (req, res) => {
         
         console.log(`📊 Mapeando columnas: ITEM=${String.fromCharCode(64+itemCol)}, DESC=${String.fromCharCode(64+descCol)}, MARCA=${String.fromCharCode(64+marcaCol)}, REF=${String.fromCharCode(64+refCol)}, UNIDAD=${String.fromCharCode(64+unidadCol)}, CANT=${String.fromCharCode(64+cantCol)}, UNIT=${String.fromCharCode(64+unitCol)}, TOTAL=${String.fromCharCode(64+totalCol)}`)
         
-        // FUNCIÓN: Clonar celda con TODOS sus estilos
-        const cloneCellStyle = (sourceCell, targetCell) => {
-          if (sourceCell.numFmt) targetCell.numFmt = sourceCell.numFmt
-          if (sourceCell.font) targetCell.font = { ...sourceCell.font }
-          if (sourceCell.fill) targetCell.fill = { ...sourceCell.fill }
-          if (sourceCell.border) targetCell.border = { ...sourceCell.border }
-          if (sourceCell.alignment) targetCell.alignment = { ...sourceCell.alignment }
-          if (sourceCell.protection) targetCell.protection = { ...sourceCell.protection }
-        }
-
-        // GUARDAR estilos originales de la fila base para clonar perfectamente
+        // Guardar todas las celdas con sus estilos de la fila base
+        const baseRowCells = {}
         const baseRowStyles = {}
+        baseRow.eachCell({ includeEmpty: true }, (cell, colNum) => {
+          baseRowCells[colNum] = {
+            style: cell.style ? JSON.parse(JSON.stringify(cell.style)) : {},
+            numFmt: cell.numFmt,
+            font: cell.font ? { ...cell.font } : undefined,
+            fill: cell.fill ? JSON.parse(JSON.stringify(cell.fill)) : undefined,
+            border: cell.border ? JSON.parse(JSON.stringify(cell.border)) : undefined,
+            alignment: cell.alignment ? { ...cell.alignment } : undefined
+          }
+        })
+
+        const applyBaseStyle = (targetRow, colNum) => {
+          const targetCell = targetRow.getCell(colNum)
+          const baseStyle = baseRowCells[colNum]
+          if (baseStyle) {
+            if (baseStyle.font) targetCell.font = { ...baseStyle.font }
+            if (baseStyle.fill) targetCell.fill = JSON.parse(JSON.stringify(baseStyle.fill))
+            if (baseStyle.border) targetCell.border = JSON.parse(JSON.stringify(baseStyle.border))
+            if (baseStyle.alignment) targetCell.alignment = { ...baseStyle.alignment }
+          }
+        }
         for (let col = 1; col <= 20; col++) {
           const cell = baseRow.getCell(col)
           baseRowStyles[col] = {
@@ -289,63 +306,65 @@ export const generateQuoteExcel = async (req, res) => {
             protection: cell.protection ? { ...cell.protection } : null
           }
         }
-        
-        // LLENAR primer item (conservando estilos)
+        // Llenar primer item en la fila base
         const item0 = items[0]
         const desc0 = item0.product_name || item0.description || 'Producto'
+        const marca0 = item0.marca || ''
+        const ref0 = item0.referencia || ''
+        const unidad0 = item0.unidad || ''
         const cant0 = parseFloat(item0.quantity) || 0
         const unit0 = parseFloat(item0.unit_price ?? item0.price) || 0
         const total0 = cant0 * unit0
 
+        baseRow.height = baseHeight
         baseRow.getCell(itemCol).value = 1
         baseRow.getCell(descCol).value = desc0
-        baseRow.getCell(marcaCol).value = ''
-        baseRow.getCell(refCol).value = ''
-        baseRow.getCell(unidadCol).value = ''
+        // Campos adicionales si existen en el template
+        if (marcaCol) baseRow.getCell(marcaCol).value = marca0
+        if (refCol) baseRow.getCell(refCol).value = ref0
+        if (unidadCol) baseRow.getCell(unidadCol).value = unidad0
         baseRow.getCell(cantCol).value = cant0
         baseRow.getCell(unitCol).value = unit0
+        baseRow.getCell(unitCol).numFmt = '$#,##0'
         baseRow.getCell(totalCol).value = total0
+        baseRow.getCell(totalCol).numFmt = '$#,##0'
 
-        console.log(`  ✓ Item 1: ${desc0}`)
+        console.log(`  ✓ Item 1: ${desc0} - Cant:${cant0} Unit:$${unit0} Total:$${total0}`)
 
-        // ITEMS ADICIONALES: NO usar spliceRows (destruye imágenes)
-        // En su lugar, trabajar directamente con las filas
+        // Insertar items adicionales preservando todos los estilos
         for (let i = 1; i < items.length; i++) {
           const item = items[i]
           const desc = item.product_name || item.description || 'Producto'
+          const marca = item.marca || ''
+          const ref = item.referencia || ''
+          const unidad = item.unidad || ''
           const cant = parseFloat(item.quantity) || 0
           const unit = parseFloat(item.unit_price ?? item.price) || 0
           const total = cant * unit
 
           const newRowNum = itemsRowStart + i
-          const newRow = worksheet.getRow(newRowNum)
+          const newRow = worksheet.insertRow(newRowNum, [])
           newRow.height = baseHeight
           
-          // COPIAR estilos de la fila base (sin spliceRows)
+          // Copiar estilos de todas las columnas de la fila base
           for (let col = 1; col <= 20; col++) {
-            const sourceCell = baseRow.getCell(col)
-            const targetCell = newRow.getCell(col)
-            
-            // Copiar estilos
-            if (sourceCell.numFmt) targetCell.numFmt = sourceCell.numFmt
-            if (sourceCell.font) targetCell.font = JSON.parse(JSON.stringify(sourceCell.font))
-            if (sourceCell.fill) targetCell.fill = JSON.parse(JSON.stringify(sourceCell.fill))
-            if (sourceCell.border) targetCell.border = JSON.parse(JSON.stringify(sourceCell.border))
-            if (sourceCell.alignment) targetCell.alignment = JSON.parse(JSON.stringify(sourceCell.alignment))
-            if (sourceCell.protection) targetCell.protection = JSON.parse(JSON.stringify(sourceCell.protection))
+            applyBaseStyle(newRow, col)
           }
-
-          // LLENAR con datos del producto
+          
+          // Llenar datos del item
           newRow.getCell(itemCol).value = i + 1
           newRow.getCell(descCol).value = desc
-          newRow.getCell(marcaCol).value = ''
-          newRow.getCell(refCol).value = ''
-          newRow.getCell(unidadCol).value = ''
+          // Campos adicionales
+          if (marcaCol) newRow.getCell(marcaCol).value = marca
+          if (refCol) newRow.getCell(refCol).value = ref
+          if (unidadCol) newRow.getCell(unidadCol).value = unidad
           newRow.getCell(cantCol).value = cant
           newRow.getCell(unitCol).value = unit
+          newRow.getCell(unitCol).numFmt = '$#,##0'
           newRow.getCell(totalCol).value = total
+          newRow.getCell(totalCol).numFmt = '$#,##0'
 
-          console.log(`  ✓ Item ${i + 1}: ${desc}`)
+          console.log(`  ✓ Item ${i + 1}: ${desc} - Cant:${cant} Unit:$${unit} Total:$${total}`)
         }
 
         console.log(`✅ Se llenaron ${items.length} productos correctamente`)
@@ -425,7 +444,7 @@ export const generateQuoteExcel = async (req, res) => {
         worksheet.getCell(`B${row}`).value = index + 1
         worksheet.getCell(`B${row}`).alignment = { horizontal: 'center' }
         
-        const descripcion = item.product_name || item.description || 'Producto'
+        const descripcion = item.display_name || item.product_name || item.description || 'Producto'
         worksheet.getCell(`C${row}`).value = descripcion
         worksheet.mergeCells(`C${row}:D${row}`)
         
@@ -433,12 +452,12 @@ export const generateQuoteExcel = async (req, res) => {
         worksheet.getCell(`E${row}`).value = cantidad
         worksheet.getCell(`E${row}`).alignment = { horizontal: 'center' }
         
-        const precioUnitario = parseFloat(item.unit_price) || 0
+        const precioUnitario = parseFloat(item.unit_price ?? item.price) || 0
         worksheet.getCell(`F${row}`).value = precioUnitario
-        worksheet.getCell(`F${row}`).numFmt = '$#.##0'
+        worksheet.getCell(`F${row}`).numFmt = '$#,##0'
         worksheet.getCell(`F${row}`).alignment = { horizontal: 'right' }
         
-        const precioTotal = parseFloat(item.total_price) || (cantidad * precioUnitario)
+        const precioTotal = parseFloat(item.total) || (cantidad * precioUnitario)
         worksheet.getCell(`G${row}`).value = precioTotal
         worksheet.getCell(`G${row}`).numFmt = '$#.##0'
         worksheet.getCell(`G${row}`).alignment = { horizontal: 'right' }
@@ -488,7 +507,11 @@ export const generateQuoteExcel = async (req, res) => {
 
     // Guardar y descargar
     const filename = `Cotizacion_RV${String(quote.id).padStart(3, '0')}_${Date.now()}.xlsx`
-    const filepath = path.join(__dirname, `../../uploads/${filename}`)
+    const uploadsDir = path.join(__dirname, `../../uploads`)
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true })
+    }
+    const filepath = path.join(uploadsDir, filename)
     
     // VERIFICAR imágenes antes de guardar
     if (useTemplate) {
@@ -509,7 +532,7 @@ export const generateQuoteExcel = async (req, res) => {
     })
   } catch (error) {
     console.error('❌ Error generando Excel:', error)
-    res.status(500).json({ message: 'Error generando cotización', error: error.message })
+    res.status(500).json({ message: 'Error generando cotización', error: error.message, stack: error.stack })
   }
 }
 

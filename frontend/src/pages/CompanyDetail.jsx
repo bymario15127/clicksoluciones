@@ -82,7 +82,7 @@ const CompanyDetail = () => {
       name: user.name,
       email: user.email,
       password: '',
-      role_id: user.role_id || '4'
+      role_id: '4' // Siempre Cliente para usuarios de empresa
     })
     setShowEditModal(true)
   }
@@ -93,7 +93,7 @@ const CompanyDetail = () => {
       const updateData = {
         name: editFormData.name,
         email: editFormData.email,
-        role_id: editFormData.role_id,
+        role_id: '4', // Siempre Cliente
         company_id: parseInt(id)
       }
       
@@ -255,18 +255,8 @@ const CompanyDetail = () => {
                 />
               </div>
 
-              <div className="form-group">
-                <label>Rol *</label>
-                <select
-                  value={userFormData.role_id}
-                  onChange={(e) => setUserFormData({...userFormData, role_id: e.target.value})}
-                  required
-                >
-                  <option value="4">Cliente</option>
-                  <option value="2">Técnico</option>
-                  <option value="1">Administrador</option>
-                </select>
-              </div>
+              {/* Rol forzado a Cliente al crear desde empresa (oculto) */}
+              <input type="hidden" value={userFormData.role_id} readOnly />
 
               <div className="modal-actions">
                 <button type="submit" className="btn btn-primary">Crear Usuario</button>
@@ -338,18 +328,8 @@ const CompanyDetail = () => {
                 />
               </div>
 
-              <div className="form-group">
-                <label>Rol *</label>
-                <select
-                  value={editFormData.role_id}
-                  onChange={(e) => setEditFormData({...editFormData, role_id: e.target.value})}
-                  required
-                >
-                  <option value="4">Cliente</option>
-                  <option value="2">Técnico</option>
-                  <option value="1">Administrador</option>
-                </select>
-              </div>
+              {/* Rol forzado a Cliente (oculto) */}
+              <input type="hidden" value="4" readOnly />
 
               <div className="modal-actions">
                 <button type="submit" className="btn btn-primary">Guardar Cambios</button>

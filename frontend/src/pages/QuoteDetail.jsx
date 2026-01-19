@@ -28,6 +28,8 @@ const QuoteDetail = () => {
     try {
       const data = await quotesService.getById(id)
       console.log('Cotización cargada:', data)
+      console.log('Items recibidos:', data.items)
+      console.log('Cantidad de items:', data.items?.length)
       setQuote(data)
     } catch (error) {
       console.error('Error loading quote:', error)
@@ -150,29 +152,39 @@ const QuoteDetail = () => {
             </tr>
           </thead>
           <tbody>
-            {quote.items && quote.items.map((item, index) => {
-              const subtotal = item.quantity * item.price
-              const iva = subtotal * (item.iva / 100)
-              const total = item.total || (subtotal + iva)
-              
-              return (
-                <tr key={index}>
-                  <td>{item.product_name || item.product?.name || 'N/A'}</td>
-                  <td>{item.quantity}</td>
-                  <td>${parseFloat(item.price).toLocaleString()}</td>
-                  <td>{item.iva}%</td>
-                  <td>${subtotal.toLocaleString()}</td>
-                  <td>${iva.toLocaleString()}</td>
-                  <td>${total.toLocaleString()}</td>
-                </tr>
-              )
-            })}
-            <tr style={{ fontWeight: 'bold', borderTop: '2px solid #ddd' }}>
-              <td colSpan="4" style={{ textAlign: 'right' }}>TOTALES:</td>
-              <td>${parseFloat(quote.subtotal).toLocaleString()}</td>
-              <td>${parseFloat(quote.iva_total).toLocaleString()}</td>
-              <td>${parseFloat(quote.total).toLocaleString()}</td>
-            </tr>
+            {quote.items && quote.items.length > 0 ? (
+              quote.items.map((item, index) => {
+                const subtotal = item.quantity * item.price
+                const iva = subtotal * (item.iva / 100)
+                const total = item.total || (subtotal + iva)
+                
+                return (
+                  <tr key={index}>
+                    <td>{item.display_name || item.product_name || item.description || item.product?.name || 'N/A'}</td>
+                    <td>{item.quantity}</td>
+                    <td>${parseFloat(item.price).toLocaleString()}</td>
+                    <td>{item.iva}%</td>
+                    <td>${subtotal.toLocaleString()}</td>
+                    <td>${iva.toLocaleString()}</td>
+                    <td>${total.toLocaleString()}</td>
+                  </tr>
+                )
+              })
+            ) : (
+              <tr>
+                <td colSpan="7" style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                  No hay productos en esta cotización
+                </td>
+              </tr>
+            )}
+            {quote.items && quote.items.length > 0 && (
+              <tr style={{ fontWeight: 'bold', borderTop: '2px solid #ddd' }}>
+                <td colSpan="4" style={{ textAlign: 'right' }}>TOTALES:</td>
+                <td>${parseFloat(quote.subtotal || 0).toLocaleString()}</td>
+                <td>${parseFloat(quote.iva_total || 0).toLocaleString()}</td>
+                <td>${parseFloat(quote.total || 0).toLocaleString()}</td>
+              </tr>
+            )}
           </tbody>
         </table>
         </div>
@@ -188,6 +200,11 @@ const QuoteDetail = () => {
           >
             📥 Descargar Excel
           </button>
+          {quote.status === 'borrador' && (
+            <button onClick={() => navigate(`/cotizaciones/${id}/editar`)} className="btn btn-info">
+              ✏️ Editar borrador
+            </button>
+          )}
           {quote.status === 'borrador' && (
             <button onClick={() => handleStatusChange('enviada')} className="btn btn-info">
               Marcar como Enviada

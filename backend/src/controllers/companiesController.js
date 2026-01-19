@@ -40,7 +40,7 @@ const companiesController = {
 
       // Obtener usuarios de esta empresa
       const [users] = await db.query(`
-        SELECT u.id, u.name, u.email, r.name as role_name
+        SELECT u.id, u.name, u.email, u.role_id, r.name as role_name
         FROM users u
         LEFT JOIN roles r ON u.role_id = r.id
         WHERE u.company_id = ?

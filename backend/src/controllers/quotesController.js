@@ -55,12 +55,20 @@ export const getById = async (req, res) => {
     }
 
     const items = await query(
-      `SELECT qi.*, p.name as product_name 
+      `SELECT qi.*, 
+        p.name as product_name,
+        COALESCE(qi.description, p.name) as display_name,
+        qi.marca,
+        qi.referencia,
+        qi.unidad
       FROM quote_items qi 
-      JOIN products p ON qi.product_id = p.id 
+      LEFT JOIN products p ON qi.product_id = p.id 
       WHERE qi.quote_id = ?`,
       [req.params.id]
     )
+
+    console.log(`📦 Items encontrados para cotización #${req.params.id}:`, items.length)
+    console.log('Items data:', JSON.stringify(items, null, 2))
 
     const quote = quotes[0]
     res.json({
@@ -69,7 +77,7 @@ export const getById = async (req, res) => {
       sales: { name: quote.sales_name },
       items: items.map(i => ({
         ...i,
-        product: { name: i.product_name }
+        product: { name: i.product_name || i.description }
       }))
     })
   } catch (error) {
@@ -118,8 +126,19 @@ export const create = async (req, res) => {
       const itemTotal = itemSubtotal + itemIva
 
       await connection.execute(
-        'INSERT INTO quote_items (quote_id, product_id, quantity, price, iva, total) VALUES (?, ?, ?, ?, ?, ?)',
-        [quote_id, item.product_id, item.quantity, item.unit_price, item.iva_percentage, itemTotal]
+        'INSERT INTO quote_items (quote_id, product_id, description, marca, referencia, unidad, quantity, price, iva, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          quote_id, 
+          item.product_id || null, 
+          item.description || null,
+          item.marca || null,
+          item.referencia || null,
+          item.unidad || null,
+          item.quantity, 
+          item.unit_price, 
+          item.iva_percentage, 
+          itemTotal
+        ]
       )
     }
 
@@ -139,15 +158,85 @@ export const create = async (req, res) => {
 }
 
 export const update = async (req, res) => {
+  const connection = await getConnection()
   try {
-    const { status } = req.body
     const { id } = req.params
+    const { status, client_id, items } = req.body
 
-    await query('UPDATE quotes SET status = ? WHERE id = ?', [status, id])
+    // Traer cotización actual
+    const rows = await query('SELECT * FROM quotes WHERE id = ?', [id])
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ message: 'Cotización no encontrada' })
+    }
+    const current = rows[0]
 
+    // Si vienen items, sólo permitir edición cuando está en borrador
+    const willEditItems = Array.isArray(items)
+    if (willEditItems && current.status !== 'borrador') {
+      return res.status(400).json({ message: 'Solo se pueden editar items cuando la cotización está en estado borrador' })
+    }
+
+    // Si no hay items: sólo actualizar status (y opcionalmente cliente)
+    if (!willEditItems) {
+      const newStatus = status ?? current.status
+      const newClientId = client_id ?? current.client_id
+      await query('UPDATE quotes SET status = ?, client_id = ? WHERE id = ?', [newStatus, newClientId, id])
+      return res.json({ message: 'Cotización actualizada exitosamente' })
+    }
+
+    // Edición completa con items (recalcular totales)
+    await connection.beginTransaction()
+
+    let subtotal = 0
+    let iva_total = 0
+    for (const item of items) {
+      const itemSubtotal = Number(item.quantity) * Number(item.unit_price)
+      const itemIva = itemSubtotal * (Number(item.iva_percentage) / 100)
+      subtotal += itemSubtotal
+      iva_total += itemIva
+    }
+    const total = subtotal + iva_total
+
+    const newStatus = status ?? current.status
+    const newClientId = client_id ?? current.client_id
+
+    await connection.execute(
+      'UPDATE quotes SET client_id = ?, subtotal = ?, iva_total = ?, total = ?, status = ? WHERE id = ?',
+      [newClientId, subtotal, iva_total, total, newStatus, id]
+    )
+
+    // Reemplazar items
+    await connection.execute('DELETE FROM quote_items WHERE quote_id = ?', [id])
+
+    for (const item of items) {
+      const itemSubtotal = Number(item.quantity) * Number(item.unit_price)
+      const itemIva = itemSubtotal * (Number(item.iva_percentage) / 100)
+      const itemTotal = itemSubtotal + itemIva
+
+      await connection.execute(
+        'INSERT INTO quote_items (quote_id, product_id, description, marca, referencia, unidad, quantity, price, iva, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          id,
+          item.product_id || null,
+          item.description || null,
+          item.marca || null,
+          item.referencia || null,
+          item.unidad || null,
+          item.quantity,
+          item.unit_price,
+          item.iva_percentage,
+          itemTotal
+        ]
+      )
+    }
+
+    await connection.commit()
     res.json({ message: 'Cotización actualizada exitosamente' })
   } catch (error) {
+    try { await connection.rollback() } catch {}
     res.status(500).json({ message: 'Error en el servidor', error: error.message })
+  } finally {
+    connection.release()
   }
 }
 

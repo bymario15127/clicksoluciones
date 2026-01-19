@@ -7,10 +7,11 @@ const Quotes = () => {
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [messageType, setMessageType] = useState('') // 'success' o 'error'
+  const [statusFilter, setStatusFilter] = useState('todos')
 
   useEffect(() => {
     loadQuotes()
-  }, [])
+  }, [statusFilter])
 
   useEffect(() => {
     if (message) {
@@ -23,7 +24,9 @@ const Quotes = () => {
 
   const loadQuotes = async () => {
     try {
-      const data = await quotesService.getAll()
+      const filters = {}
+      if (statusFilter !== 'todos') filters.status = statusFilter
+      const data = await quotesService.getAll(filters)
       console.log('Cotizaciones cargadas:', data)
       setQuotes(data)
     } catch (error) {
@@ -87,6 +90,18 @@ const Quotes = () => {
         </div>
       </div>
 
+      <div style={{ marginBottom: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        {['todos','borrador','enviada','aprobada','rechazada'].map(s => (
+          <button
+            key={s}
+            onClick={() => setStatusFilter(s)}
+            className={`btn btn-sm ${statusFilter === s ? 'btn-primary' : 'btn-secondary'}`}
+          >
+            {s.charAt(0).toUpperCase() + s.slice(1)}
+          </button>
+        ))}
+      </div>
+
       <div className="card">
         {quotes.length === 0 ? (
           <div style={{ padding: '40px', textAlign: 'center', color: '#666' }}>
@@ -130,6 +145,11 @@ const Quotes = () => {
                     <Link to={`/cotizaciones/${quote.id}`} className="btn btn-sm btn-primary">
                       Ver
                     </Link>
+                    {quote.status === 'borrador' && (
+                      <Link to={`/cotizaciones/${quote.id}/editar`} className="btn btn-sm btn-info" style={{ marginLeft: '5px' }}>
+                        Editar
+                      </Link>
+                    )}
                     <button 
                       onClick={() => deleteQuote(quote.id)}
                       className="btn btn-sm btn-danger"

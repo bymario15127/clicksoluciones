@@ -16,9 +16,14 @@ const QuoteNew = () => {
   const [items, setItems] = useState([])
   const [currentItem, setCurrentItem] = useState({
     product_id: '',
+    custom_description: '',
+    custom_marca: '',
+    custom_referencia: '',
+    custom_unidad: '',
     quantity: 1,
     unit_price: 0,
-    iva_percentage: 19
+    iva_percentage: 19,
+    is_custom: false
   })
 
   useEffect(() => {
@@ -51,24 +56,51 @@ const QuoteNew = () => {
       setCurrentItem({
         ...currentItem,
         product_id: productId,
-        unit_price: parseFloat(product.price_sell) || 0
+        unit_price: parseFloat(product.price_sell) || 0,
+        is_custom: false,
+        custom_description: ''
       })
     } else {
       setCurrentItem({
         ...currentItem,
         product_id: productId,
-        unit_price: 0
+        unit_price: 0,
+        is_custom: false,
+        custom_description: ''
       })
     }
   }
 
+  const toggleCustomProduct = () => {
+    setCurrentItem({
+      ...currentItem,
+      is_custom: !currentItem.is_custom,
+      product_id: '',
+      custom_description: '',
+      custom_marca: '',
+      custom_referencia: '',
+      custom_unidad: '',
+      unit_price: 0
+    })
+  }
+
   const addItem = () => {
-    if (!currentItem.product_id || currentItem.quantity <= 0) {
-      alert('Seleccione un producto y cantidad válida')
-      return
+    if (currentItem.is_custom) {
+      if (!currentItem.custom_description || currentItem.quantity <= 0) {
+        alert('Complete la descripción y cantidad del producto personalizado')
+        return
+      }
+    } else {
+      if (!currentItem.product_id || currentItem.quantity <= 0) {
+        alert('Seleccione un producto y cantidad válida')
+        return
+      }
     }
 
-    const product = products.find(p => p.id === parseInt(currentItem.product_id))
+    const product = currentItem.is_custom 
+      ? { name: currentItem.custom_description }
+      : products.find(p => p.id === parseInt(currentItem.product_id))
+    
     const subtotal = currentItem.quantity * currentItem.unit_price
     const iva = (subtotal * currentItem.iva_percentage) / 100
     const total = subtotal + iva
@@ -84,9 +116,14 @@ const QuoteNew = () => {
     // Reset current item
     setCurrentItem({
       product_id: '',
+      custom_description: '',
+      custom_marca: '',
+      custom_referencia: '',
+      custom_unidad: '',
       quantity: 1,
       unit_price: 0,
-      iva_percentage: 19
+      iva_percentage: 19,
+      is_custom: false
     })
   }
 
@@ -117,7 +154,11 @@ const QuoteNew = () => {
         iva_total: totals.iva,
         total: totals.total,
         items: items.map(item => ({
-          product_id: item.product_id,
+          product_id: item.is_custom ? null : item.product_id,
+          description: item.is_custom ? item.custom_description : null,
+          marca: item.is_custom ? item.custom_marca : null,
+          referencia: item.is_custom ? item.custom_referencia : null,
+          unidad: item.is_custom ? item.custom_unidad : null,
           quantity: item.quantity,
           unit_price: item.unit_price,
           iva_percentage: item.iva_percentage
@@ -186,21 +227,73 @@ const QuoteNew = () => {
         <div className="card" style={{ marginBottom: '20px' }}>
           <h3>Agregar Productos</h3>
           
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: '10px', alignItems: 'end' }}>
-            <div className="form-group">
-              <label>Producto</label>
-              <select
-                value={currentItem.product_id}
-                onChange={(e) => handleProductSelect(e.target.value)}
-              >
-                <option value="">Seleccione un producto</option>
-                {products.map(product => (
-                  <option key={product.id} value={product.id}>
-                    {product.name} - ${parseFloat(product.price_sell).toLocaleString()}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+              <input 
+                type="checkbox" 
+                checked={currentItem.is_custom}
+                onChange={toggleCustomProduct}
+              />
+              <span>Producto personalizado (sin inventario)</span>
+            </label>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: currentItem.is_custom ? '2fr 1fr 1fr 1fr 1fr 1fr 1fr auto' : '2fr 1fr 1fr 1fr auto', gap: '10px', alignItems: 'end' }}>
+            {currentItem.is_custom ? (
+              <>
+                <div className="form-group">
+                  <label>Descripción/Característica *</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Portátil HP Core i7"
+                    value={currentItem.custom_description}
+                    onChange={(e) => setCurrentItem({ ...currentItem, custom_description: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Marca</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: HP"
+                    value={currentItem.custom_marca}
+                    onChange={(e) => setCurrentItem({ ...currentItem, custom_marca: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Referencia</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: 15-EF2025LA"
+                    value={currentItem.custom_referencia}
+                    onChange={(e) => setCurrentItem({ ...currentItem, custom_referencia: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Unidad</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: UND, HRS"
+                    value={currentItem.custom_unidad}
+                    onChange={(e) => setCurrentItem({ ...currentItem, custom_unidad: e.target.value })}
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="form-group">
+                <label>Producto</label>
+                <select
+                  value={currentItem.product_id}
+                  onChange={(e) => handleProductSelect(e.target.value)}
+                >
+                  <option value="">Seleccione un producto</option>
+                  {products.map(product => (
+                    <option key={product.id} value={product.id}>
+                      {product.name} - ${parseFloat(product.price_sell).toLocaleString()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="form-group">
               <label>Cantidad</label>

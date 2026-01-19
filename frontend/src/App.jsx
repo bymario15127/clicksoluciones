@@ -15,6 +15,7 @@ import Products from './pages/Products'
 import Quotes from './pages/Quotes'
 import QuoteNew from './pages/QuoteNew'
 import QuoteDetail from './pages/QuoteDetail'
+import QuoteEdit from './pages/QuoteEdit'
 import Sales from './pages/Sales'
 import Admin from './pages/Admin'
 import AdminSettings from './pages/AdminSettings'
@@ -53,6 +54,7 @@ function App() {
             <Route path="cotizaciones" element={<Quotes />} />
             <Route path="cotizaciones/new" element={<QuoteNew />} />
             <Route path="cotizaciones/:id" element={<QuoteDetail />} />
+            <Route path="cotizaciones/:id/editar" element={<QuoteEdit />} />
             <Route path="ventas" element={<Sales />} />
             <Route path="administracion" element={<ProtectedRoute roles={['admin']}><Admin /></ProtectedRoute>} />
             <Route path="configuracion" element={<ProtectedRoute roles={['admin']}><AdminSettings /></ProtectedRoute>} />

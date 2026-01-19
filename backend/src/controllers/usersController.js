@@ -57,9 +57,8 @@ export const create = async (req, res) => {
       return res.status(400).json({ message: 'La contraseña es obligatoria' })
     }
     
-    if (!role_id) {
-      return res.status(400).json({ message: 'El rol es obligatorio' })
-    }
+    // Rol por defecto: 4 = Cliente. Si se crea desde empresa y no mandan rol, usar Cliente.
+    const finalRoleId = role_id ? Number(role_id) : 4
 
     const normalizedEmail = email && email.trim() !== '' ? email.trim() : null
 
@@ -74,7 +73,7 @@ export const create = async (req, res) => {
 
     const result = await query(
       'INSERT INTO users (name, email, password, role_id, company_id) VALUES (?, ?, ?, ?, ?)',
-      [name, normalizedEmail, hashedPassword, role_id, company_id || null]
+      [name, normalizedEmail, hashedPassword, finalRoleId, company_id || null]
     )
 
     res.status(201).json({ 
